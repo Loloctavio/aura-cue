@@ -1,7 +1,8 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from app.services.auth_service import decode_token
+
 from app.models.repositories.users_repo import UsersRepo
+from app.services.auth_service import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
@@ -16,6 +17,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     user = await repo.get(user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    if payload.get("ver", 0) != user.get("auth_version", 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is no longer valid")
 
     spotify_doc = user.get("spotify") or {}
     spotify_public = None

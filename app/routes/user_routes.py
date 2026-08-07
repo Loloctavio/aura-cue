@@ -58,7 +58,7 @@ async def update_me(payload: UserUpdate, current_user=Depends(get_current_user))
     return _serialize_user(doc)
 
 
-@router.put("/me/password")
+@router.put("/me/password", response_model=TokenResponse)
 async def change_password(payload: ChangePassword, current_user=Depends(get_current_user)):
     return await controller.change_password(current_user, payload)
 

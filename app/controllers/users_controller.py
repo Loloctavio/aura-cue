@@ -16,25 +16,25 @@ class UsersController:
         hashed = hash_password(payload.password)
         doc, err = await self.repo.create(
             username=payload.username,
-            gmail=str(payload.gmail),
+            gmail=str(payload.gmail).strip().lower(),
             hashed_password=hashed,
             profile_photo=payload.profile_photo,
         )
         if err:
             raise HTTPException(status_code=409, detail=err)
 
-        token = create_access_token(sub=str(doc["_id"]))
+        token = create_access_token(sub=str(doc["_id"]), auth_version=doc.get("auth_version", 0))
         return {"access_token": token, "token_type": "bearer"}
 
     async def login(self, payload):
-        user = await self.repo.find_by_gmail(str(payload.gmail))
+        user = await self.repo.find_by_gmail(str(payload.gmail).strip().lower())
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         if not verify_password(payload.password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        token = create_access_token(sub=str(user["_id"]))
+        token = create_access_token(sub=str(user["_id"]), auth_version=user.get("auth_version", 0))
         return {"access_token": token, "token_type": "bearer"}
 
     async def me(self, current_user: dict):
@@ -61,8 +61,13 @@ class UsersController:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         new_hashed = hash_password(payload.new_password)
-        await self.repo.update(current_user["id"], {"password": new_hashed})
-        return {"changed": True}
+        auth_version = user.get("auth_version", 0) + 1
+        await self.repo.update(
+            current_user["id"],
+            {"password": new_hashed, "auth_version": auth_version},
+        )
+        token = create_access_token(sub=current_user["id"], auth_version=auth_version)
+        return {"access_token": token, "token_type": "bearer"}
 
     async def delete_me(self, current_user: dict):
         user_id = current_user["id"]

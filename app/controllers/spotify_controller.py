@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 
 from app.models.repositories.users_repo import UsersRepo
 from app.services.spotify_oauth_service import SpotifyOAuthService
+from app.services.token_crypto import encrypt_secret
 
 
 class SpotifyController:
@@ -16,35 +17,38 @@ class SpotifyController:
     async def start_connect(self, *, user_id: str, redirect_to: str | None) -> dict:
         state = self.oauth.generate_state()
         state_expires_at = self.oauth.state_expires_at()
+        safe_redirect = (
+            redirect_to
+            if redirect_to
+            and redirect_to.startswith("/")
+            and not redirect_to.startswith("//")
+            and "\\" not in redirect_to
+            else None
+        )
 
         await self.repo.update(
             user_id,
             {
                 "spotify_oauth_state": state,
                 "spotify_oauth_state_expires_at": state_expires_at,
-                "spotify_oauth_redirect_to": redirect_to,
+                "spotify_oauth_redirect_to": safe_redirect,
             },
         )
 
         return {
             "authorization_url": self.oauth.build_authorize_url(state=state),
-            "state": state,
             "expires_at": state_expires_at,
         }
 
     async def handle_callback(self, *, code: str, state: str) -> dict:
-        user = await self.repo.find_by_spotify_oauth_state(state)
+        user = await self.repo.consume_spotify_oauth_state(state, now=datetime.utcnow())
         if not user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
-
-        expires_at = user.get("spotify_oauth_state_expires_at")
-        if not expires_at or expires_at < datetime.utcnow():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expired OAuth state")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OAuth state")
 
         token_data = await self.oauth.exchange_code(code=code)
         access_token = token_data.get("access_token")
         refresh_token = token_data.get("refresh_token")
-        expires_in = int(token_data.get("expires_in", 3600))
+        expires_in = max(1, min(int(token_data.get("expires_in", 3600)), 86_400))
 
         if not access_token:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Spotify access_token")
@@ -58,8 +62,8 @@ class SpotifyController:
         now = datetime.utcnow()
         spotify_doc = {
             "spotify_user_id": spotify_user_id,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
+            "access_token_enc": encrypt_secret(access_token),
+            "refresh_token_enc": encrypt_secret(refresh_token),
             "token_type": token_data.get("token_type", "Bearer"),
             "scope": token_data.get("scope"),
             "expires_at": now + timedelta(seconds=expires_in),
@@ -71,9 +75,6 @@ class SpotifyController:
             {
                 "spotify_connected": True,
                 "spotify": spotify_doc,
-                "spotify_oauth_state": None,
-                "spotify_oauth_state_expires_at": None,
-                "spotify_oauth_redirect_to": None,
             },
         )
 

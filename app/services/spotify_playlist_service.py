@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 
 from app.models.repositories.users_repo import UsersRepo
 from app.services.spotify_http import spotify_request_json
+from app.services.token_crypto import decrypt_secret, encrypt_secret
 
 
 class SpotifyPlaylistService:
@@ -59,13 +60,35 @@ class SpotifyPlaylistService:
                 context="Spotify refresh",
             )
 
+    async def _store_encrypted_tokens(
+        self,
+        *,
+        user_doc: dict,
+        spotify: dict,
+        access_token: str,
+        refresh_token: str | None,
+    ) -> None:
+        spotify["access_token_enc"] = encrypt_secret(access_token)
+        spotify["refresh_token_enc"] = encrypt_secret(refresh_token)
+        spotify.pop("access_token", None)
+        spotify.pop("refresh_token", None)
+        await self.users_repo.update(str(user_doc["_id"]), {"spotify": spotify, "spotify_connected": True})
+
     async def _get_valid_access_token(self, user_doc: dict) -> str:
         spotify = user_doc.get("spotify") or {}
-        access_token = spotify.get("access_token")
-        refresh_token = spotify.get("refresh_token")
+        access_token = decrypt_secret(spotify.get("access_token_enc")) or spotify.get("access_token")
+        refresh_token = decrypt_secret(spotify.get("refresh_token_enc")) or spotify.get("refresh_token")
         expires_at = spotify.get("expires_at")
+        uses_legacy_plaintext = bool(access_token and not spotify.get("access_token_enc"))
 
         if access_token and isinstance(expires_at, datetime) and expires_at > datetime.utcnow() + timedelta(seconds=30):
+            if uses_legacy_plaintext:
+                await self._store_encrypted_tokens(
+                    user_doc=user_doc,
+                    spotify=spotify,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                )
             return access_token
 
         if not refresh_token:
@@ -79,17 +102,20 @@ class SpotifyPlaylistService:
         if not new_access_token:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not refresh Spotify token")
 
-        expires_in = int(refreshed.get("expires_in", 3600))
+        expires_in = max(1, min(int(refreshed.get("expires_in", 3600)), 86_400))
         new_refresh = refreshed.get("refresh_token", refresh_token)
 
-        spotify["access_token"] = new_access_token
-        spotify["refresh_token"] = new_refresh
         spotify["expires_at"] = datetime.utcnow() + timedelta(seconds=expires_in)
         spotify["token_type"] = refreshed.get("token_type", spotify.get("token_type", "Bearer"))
         if refreshed.get("scope"):
             spotify["scope"] = refreshed.get("scope")
 
-        await self.users_repo.update(str(user_doc["_id"]), {"spotify": spotify, "spotify_connected": True})
+        await self._store_encrypted_tokens(
+            user_doc=user_doc,
+            spotify=spotify,
+            access_token=new_access_token,
+            refresh_token=new_refresh,
+        )
         return new_access_token
 
     async def _create_playlist(

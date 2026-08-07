@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta
 
 from bson import ObjectId
 
-from app.db.mongo import get_collections
+from app.db.mongo import PROMPTS_LOG_TTL_DAYS, get_collections
 
 cols = get_collections()
 prompts_col = cols["prompts"]
-PROMPTS_LOG_TTL_DAYS = max(1, int(os.getenv("PROMPTS_LOG_TTL_DAYS")))
 
 
 class PromptsRepo:

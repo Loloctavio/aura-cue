@@ -28,7 +28,7 @@ def _with_status(url: str, *, status_value: str, message: str | None = None) -> 
 
 @router.get("/spotify/connect")
 async def spotify_connect(
-    redirect_to: str | None = Query(default=None),
+    redirect_to: str | None = Query(default=None, max_length=200),
     as_redirect: bool = Query(default=False),
     current_user=Depends(get_current_user),
 ):
@@ -49,9 +49,9 @@ async def spotify_disconnect(current_user=Depends(get_current_user)):
 
 
 async def _handle_spotify_callback(
-    code: str | None = Query(default=None),
-    state: str | None = Query(default=None),
-    error: str | None = Query(default=None),
+    code: str | None = Query(default=None, max_length=2048),
+    state: str | None = Query(default=None, max_length=200),
+    error: str | None = Query(default=None, max_length=100),
 ):
     target = _frontend_profile_url()
 
@@ -74,17 +74,17 @@ async def _handle_spotify_callback(
 
 @router.get("/spotify/callback")
 async def spotify_callback(
-    code: str | None = Query(default=None),
-    state: str | None = Query(default=None),
-    error: str | None = Query(default=None),
+    code: str | None = Query(default=None, max_length=2048),
+    state: str | None = Query(default=None, max_length=200),
+    error: str | None = Query(default=None, max_length=100),
 ):
     return await _handle_spotify_callback(code=code, state=state, error=error)
 
 
 @router.get("/callback")
 async def spotify_callback_legacy(
-    code: str | None = Query(default=None),
-    state: str | None = Query(default=None),
-    error: str | None = Query(default=None),
+    code: str | None = Query(default=None, max_length=2048),
+    state: str | None = Query(default=None, max_length=200),
+    error: str | None = Query(default=None, max_length=100),
 ):
     return await _handle_spotify_callback(code=code, state=state, error=error)

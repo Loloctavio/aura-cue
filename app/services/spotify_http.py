@@ -63,5 +63,5 @@ async def spotify_request_json(
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"{context} failed (status={last_status}): {last_data}",
+        detail=f"{context} failed (status={last_status})",
     )

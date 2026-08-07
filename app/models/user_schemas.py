@@ -1,28 +1,47 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserRegister(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     gmail: EmailStr
-    password: str = Field(min_length=8)
-    profile_photo: Optional[str] = None
+    password: str = Field(min_length=12, max_length=256)
+    profile_photo: Optional[str] = Field(default=None, max_length=2048)
+
+    @field_validator("username")
+    @classmethod
+    def username_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Username must contain at least 3 non-space characters")
+        return value
 
 
 class UserLogin(BaseModel):
     gmail: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=256)
 
 
 class UserUpdate(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=30)
-    profile_photo: Optional[str] = None
+    profile_photo: Optional[str] = Field(default=None, max_length=2048)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Username must contain at least 3 non-space characters")
+        return value
 
 
 class ChangePassword(BaseModel):
-    old_password: str = Field(min_length=8)
-    new_password: str = Field(min_length=8)
+    old_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
 
 
 class TokenResponse(BaseModel):
@@ -41,7 +60,7 @@ class UserOut(BaseModel):
     username: str
     gmail: EmailStr
     profile_photo: Optional[str] = None
-    playlists: List[str] = []
+    playlists: List[str] = Field(default_factory=list)
     spotify_connected: bool = False
     spotify: Optional[SpotifyInfoOut] = None
     created_at: datetime
