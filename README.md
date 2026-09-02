@@ -44,8 +44,8 @@ SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 SPOTIPY_REDIRECT_URI=http://127.0.0.1:8080/callback
 
-MONGO_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/?appName=ai-playlists
-MONGO_DB=ai-playlist
+MONGO_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/?appName=APPNAME
+MONGO_DB=DB_NAME
 
 ⚠️ Do NOT commit your .env file.
 
